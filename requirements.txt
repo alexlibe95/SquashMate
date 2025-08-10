@@ -1,0 +1,5 @@
+# System packages required (install via apt):
+# sudo apt install python3-pyqt5
+
+# Or if using pip in a virtual environment:
+# PyQt5>=5.15.0

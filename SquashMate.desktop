@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=SquashMate
+Comment=AppImage Installation Manager
+Exec=./launch.sh
+Icon=./squashmate_icon.svg
+Type=Application
+Categories=System;PackageManager;Utility;
+Terminal=false
+StartupNotify=true
+Keywords=AppImage;Install;Package;Manager;
+MimeType=application/x-appimage;
