@@ -38,7 +38,7 @@ echo -e "\n${YELLOW}Creating desktop entry...${NC}"
 cat > "$APPLICATIONS_DIR/SquashMate.desktop" << EOF
 [Desktop Entry]
 Name=SquashMate
-Comment=AppImage Installation Manager
+Comment=AppImage & Deb Package Manager
 Exec=$SQUASHMATE_DIR/launch.sh
 Icon=$SQUASHMATE_DIR/squashmate_icon.svg
 Type=Application

@@ -72,25 +72,71 @@ class SquashMateLogger:
     def log_app_launch(self, app_name, command, success=True, error_output=None):
         """Log application launch attempts and results."""
         app_log_file = self.apps_log_dir / f"{app_name}.log"
-        
+
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
+
         with open(app_log_file, 'a', encoding='utf-8') as f:
             f.write(f"\n{'='*60}\n")
             f.write(f"Launch attempt: {timestamp}\n")
             f.write(f"Command: {' '.join(command)}\n")
             f.write(f"Status: {'SUCCESS' if success else 'FAILED'}\n")
-            
+
             if not success and error_output:
                 f.write(f"\nError Output:\n{error_output}\n")
-            
+
             f.write(f"{'='*60}\n")
-        
+
         # Also log to main logger
         status = "successfully" if success else "failed"
         self.logger.info(f"App launch {status}: {app_name}")
         if not success:
             self.logger.error(f"App launch error for {app_name}: {error_output}")
+
+    def log_deb_installation(self, package_name, version, success=True, error_output=None):
+        """Log .deb package installation attempts and results."""
+        deb_log_file = self.log_dir / "deb_packages.log"
+
+        timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        with open(deb_log_file, 'a', encoding='utf-8') as f:
+            f.write(f"\n{'='*60}\n")
+            f.write(f"Installation attempt: {timestamp}\n")
+            f.write(f"Package: {package_name} {version}\n")
+            f.write(f"Status: {'SUCCESS' if success else 'FAILED'}\n")
+
+            if not success and error_output:
+                f.write(f"\nError Output:\n{error_output}\n")
+
+            f.write(f"{'='*60}\n")
+
+        # Also log to main logger
+        status = "successfully" if success else "failed"
+        self.logger.info(f"Deb package installation {status}: {package_name} {version}")
+        if not success:
+            self.logger.error(f"Deb package installation error for {package_name}: {error_output}")
+
+    def log_deb_uninstallation(self, package_name, success=True, error_output=None):
+        """Log .deb package uninstallation attempts and results."""
+        deb_log_file = self.log_dir / "deb_packages.log"
+
+        timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        with open(deb_log_file, 'a', encoding='utf-8') as f:
+            f.write(f"\n{'='*60}\n")
+            f.write(f"Uninstallation attempt: {timestamp}\n")
+            f.write(f"Package: {package_name}\n")
+            f.write(f"Status: {'SUCCESS' if success else 'FAILED'}\n")
+
+            if not success and error_output:
+                f.write(f"\nError Output:\n{error_output}\n")
+
+            f.write(f"{'='*60}\n")
+
+        # Also log to main logger
+        status = "successfully" if success else "failed"
+        self.logger.info(f"Deb package uninstallation {status}: {package_name}")
+        if not success:
+            self.logger.error(f"Deb package uninstallation error for {package_name}: {error_output}")
     
     def get_app_logs(self, app_name):
         """Get logs for a specific application."""
@@ -413,6 +459,282 @@ StartupNotify=true
             return False
 
 
+class DebInstaller(QThread):
+    """Worker thread for .deb package installation operations."""
+
+    status_update = pyqtSignal(str)
+    progress_update = pyqtSignal(int)
+    finished_signal = pyqtSignal(bool, str)
+
+    def __init__(self, deb_path):
+        super().__init__()
+        self.deb_path = deb_path
+        self.pkexec_available = self.check_pkexec_available()
+
+    def check_pkexec_available(self):
+        """Check if pkexec is available for GUI sudo operations."""
+        try:
+            result = subprocess.run(['which', 'pkexec'], capture_output=True, text=True)
+            return result.returncode == 0
+        except Exception:
+            return False
+
+    def run(self):
+        """Execute the .deb installation process."""
+        try:
+            # Add a timeout wrapper to prevent hanging
+            import threading
+            result = [None, None]
+
+            def target():
+                try:
+                    self.install_deb()
+                except Exception as e:
+                    result[0] = False
+                    result[1] = str(e)
+
+            thread = threading.Thread(target=target)
+            thread.daemon = True
+            thread.start()
+            thread.join(timeout=600)  # 10 minute timeout
+
+            if thread.is_alive():
+                self.status_update.emit("Installation timed out after 10 minutes")
+                self.finished_signal.emit(False, "Installation timed out - the process may still be running in the background")
+            elif result[0] is False:
+                self.finished_signal.emit(False, result[1])
+
+        except Exception as e:
+            self.finished_signal.emit(False, str(e))
+
+    def install_deb(self):
+        """Main .deb installation logic."""
+        # Step 0: Check if pkexec is available
+        if not self.pkexec_available:
+            self.status_update.emit("Error: pkexec not available for GUI operations")
+            self.finished_signal.emit(False, "pkexec is required for .deb installation but is not available.\n\nPlease install policykit-1 with:\nsudo apt install policykit-1")
+            return
+
+        # Step 1: Validate .deb file
+        self.status_update.emit("Validating .deb package...")
+        self.progress_update.emit(10)
+
+        if not self.validate_deb():
+            self.finished_signal.emit(False, "Invalid .deb file")
+            return
+
+        # Step 2: Get package information
+        self.status_update.emit("Extracting package information...")
+        self.progress_update.emit(25)
+
+        package_info = self.get_package_info()
+        if not package_info:
+            self.finished_signal.emit(False, "Could not extract package information")
+            return
+
+        package_name = package_info.get('Package', 'Unknown')
+        version = package_info.get('Version', 'Unknown')
+
+        # Step 3: Check if package is already installed
+        if self.is_package_installed(package_name):
+            self.status_update.emit(f"Updating {package_name}...")
+        else:
+            self.status_update.emit(f"Installing {package_name}...")
+
+        self.progress_update.emit(40)
+
+        # Step 4: Update package cache
+        self.status_update.emit("Preparing package system...")
+        self.progress_update.emit(60)
+
+        self.install_dependencies()  # This just updates cache now
+
+        # Step 5: Install the package
+        self.progress_update.emit(80)
+
+        if not self.install_package():
+            error_msg = (f"Failed to install package automatically.\n\n"
+                        f"You can install it manually using these terminal commands:\n"
+                        f"sudo dpkg -i {self.deb_path}\n"
+                        f"sudo apt-get install -f\n\n"
+                        f"Or using apt directly:\n"
+                        f"sudo apt install {self.deb_path}")
+            self.finished_signal.emit(False, error_msg)
+            return
+
+        # Step 6: Verify installation
+        self.status_update.emit("Verifying installation...")
+        self.progress_update.emit(95)
+
+        if self.verify_installation(package_name):
+            self.status_update.emit(f"Successfully installed {package_name}!")
+            self.progress_update.emit(100)
+            self.finished_signal.emit(True, f"{package_name} {version} has been successfully installed!")
+        else:
+            self.finished_signal.emit(False, "Package installation could not be verified")
+
+    def validate_deb(self):
+        """Validate that the file is a proper .deb package."""
+        try:
+            # Check file extension
+            if not self.deb_path.endswith('.deb'):
+                return False
+
+            # Check if file exists and is readable
+            if not os.path.exists(self.deb_path):
+                return False
+
+            # Try to read the debian control file
+            result = subprocess.run(['dpkg', '--info', self.deb_path],
+                                  capture_output=True, text=True)
+            return result.returncode == 0
+
+        except Exception as e:
+            self.status_update.emit(f"Validation error: {str(e)}")
+            return False
+
+    def get_package_info(self):
+        """Extract package information from .deb file."""
+        try:
+            result = subprocess.run(['dpkg', '--info', self.deb_path],
+                                  capture_output=True, text=True)
+
+            if result.returncode != 0:
+                return None
+
+            info = {}
+            for line in result.stdout.split('\n'):
+                if ': ' in line:
+                    key, value = line.split(': ', 1)
+                    info[key.strip()] = value.strip()
+
+            return info
+
+        except Exception as e:
+            self.status_update.emit(f"Error extracting package info: {str(e)}")
+            return None
+
+    def is_package_installed(self, package_name):
+        """Check if a package is already installed."""
+        try:
+            result = subprocess.run(['dpkg', '-l', package_name],
+                                  capture_output=True, text=True)
+            return result.returncode == 0 and 'ii' in result.stdout
+        except Exception:
+            return False
+
+    def install_dependencies(self):
+        """Prepare for package installation."""
+        # Skip complex dependency preparation - let the installation handle it
+        self.status_update.emit("Ready for package installation")
+        return True
+
+    def install_package(self):
+        """Install the .deb package using streamlined approach."""
+        try:
+            self.status_update.emit("Installing package...")
+
+            # Try the most direct approach first - pkexec with no extra windows
+            self.status_update.emit("Attempting direct installation...")
+
+            # Create installation commands
+            install_cmds = [
+                f"dpkg -i '{self.deb_path}'",
+                "apt-get install -f -y"
+            ]
+
+            # Try pkexec approach first (most streamlined)
+            success = False
+            for cmd in install_cmds:
+                try:
+                    self.status_update.emit(f"Running: {cmd}")
+                    pkexec_cmd = ['pkexec', 'bash', '-c', cmd]
+                    result = subprocess.run(pkexec_cmd, capture_output=True, text=True, timeout=120)
+
+                    if result.returncode == 0:
+                        self.status_update.emit("Command completed successfully")
+                        success = True
+                    else:
+                        self.status_update.emit(f"Command failed: {result.stderr}")
+                        break  # Stop if any command fails
+
+                except subprocess.TimeoutExpired:
+                    self.status_update.emit("Command timed out")
+                    break
+                except Exception as e:
+                    self.status_update.emit(f"Command error: {str(e)}")
+                    break
+
+            if success:
+                self.status_update.emit("Package installed successfully!")
+                return True
+
+            # If pkexec fails, try terminal approach as fallback
+            self.status_update.emit("Direct approach failed, trying terminal method...")
+
+            # Create a temporary script with the installation commands
+            import tempfile
+            import os
+
+            script_content = f"""#!/bin/bash
+echo "Installing {os.path.basename(self.deb_path)}..."
+dpkg -i "{self.deb_path}"
+echo "Resolving dependencies..."
+apt-get install -f -y
+echo "Installation completed successfully!"
+"""
+
+            # Write the script to a temporary file
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.sh', delete=False) as f:
+                f.write(script_content)
+                script_path = f.name
+
+            # Make the script executable
+            os.chmod(script_path, 0o755)
+
+            # Try using gnome-terminal with minimal window
+            try:
+                self.status_update.emit("Opening terminal for authentication...")
+                terminal_cmd = [
+                    'gnome-terminal',
+                    '--title=SquashMate Installation',
+                    '--geometry=80x10',
+                    '--', 'bash', '-c', f'sudo bash "{script_path}"; echo "Press Enter to close"; read'
+                ]
+                result = subprocess.run(terminal_cmd, timeout=600)
+                success = result.returncode == 0
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                success = False
+
+            # Clean up the temporary script
+            try:
+                os.unlink(script_path)
+            except:
+                pass
+
+            if success:
+                self.status_update.emit("Package installed successfully via terminal")
+                return True
+            else:
+                # Final fallback: provide manual instructions
+                manual_cmd = f"sudo dpkg -i '{self.deb_path}' && sudo apt-get install -f"
+                self.status_update.emit(f"For manual installation, run: {manual_cmd}")
+                return False
+
+        except Exception as e:
+            self.status_update.emit(f"Installation error: {str(e)}")
+            return False
+
+    def verify_installation(self, package_name):
+        """Verify that the package was installed successfully."""
+        try:
+            result = subprocess.run(['dpkg', '-l', package_name],
+                                  capture_output=True, text=True)
+            return result.returncode == 0 and 'ii' in result.stdout
+        except Exception:
+            return False
+
+
 class InstalledAppsManager:
     """Helper class for managing installed applications."""
     
@@ -502,6 +824,95 @@ class InstalledAppsManager:
         except Exception:
             # Ignore cleanup errors
             pass
+
+    @staticmethod
+    def get_installed_deb_packages():
+        """Get list of installed .deb packages."""
+        try:
+            # Use dpkg to list all installed packages
+            result = subprocess.run(['dpkg', '-l'], capture_output=True, text=True)
+
+            if result.returncode != 0:
+                return []
+
+            packages = []
+            lines = result.stdout.strip().split('\n')
+
+            # Skip header lines (first 5 lines)
+            for line in lines[5:]:
+                if line.startswith('ii'):  # Only properly installed packages
+                    parts = line.split()
+                    if len(parts) >= 4:
+                        status = parts[0]
+                        package_name = parts[1]
+                        version = parts[2]
+                        description = ' '.join(parts[3:]) if len(parts) > 3 else ''
+
+                        packages.append({
+                            'name': package_name,
+                            'version': version,
+                            'status': status,
+                            'description': description,
+                            'type': 'deb',
+                            'size': 'N/A'  # Size calculation for system packages is complex
+                        })
+
+            return sorted(packages, key=lambda x: x['name'])
+
+        except Exception as e:
+            print(f"Error getting installed .deb packages: {str(e)}")
+            return []
+
+    @staticmethod
+    def get_combined_installed_items():
+        """Get combined list of AppImages and .deb packages."""
+        appimages = InstalledAppsManager.get_installed_apps()
+        deb_packages = InstalledAppsManager.get_installed_deb_packages()
+
+        # Mark AppImages with type
+        for app in appimages:
+            app['type'] = 'appimage'
+
+        return appimages + deb_packages
+
+    @staticmethod
+    def uninstall_deb_package(package_name):
+        """Uninstall a .deb package."""
+        try:
+            # Check if pkexec is available
+            pkexec_check = subprocess.run(['which', 'pkexec'], capture_output=True, text=True)
+            if pkexec_check.returncode != 0:
+                return False, "pkexec is required for .deb uninstallation but is not available.\n\nPlease install policykit-1 with:\nsudo apt install policykit-1"
+
+            # Use apt-get to remove the package with pkexec for GUI compatibility
+            result = subprocess.run(['pkexec', 'apt-get', 'remove', '-y', package_name],
+                                  capture_output=True, text=True)
+
+            return result.returncode == 0, result.stderr if result.returncode != 0 else None
+
+        except Exception as e:
+            return False, str(e)
+
+    @staticmethod
+    def get_package_info(package_name):
+        """Get detailed information about a .deb package."""
+        try:
+            result = subprocess.run(['dpkg', '-s', package_name],
+                                  capture_output=True, text=True)
+
+            if result.returncode != 0:
+                return None
+
+            info = {}
+            for line in result.stdout.split('\n'):
+                if ': ' in line:
+                    key, value = line.split(': ', 1)
+                    info[key.strip()] = value.strip()
+
+            return info
+
+        except Exception as e:
+            return None
     
     @staticmethod
     def update_desktop_entries_to_use_wrapper():
@@ -515,20 +926,22 @@ class SquashMateGUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.appimage_path = None
+        self.deb_path = None
         self.installer_thread = None
-        
+        self.deb_installer_thread = None
+
         # Initialize logger
         self.logger = SquashMateLogger()
         self.logger.log_operation('info', 'SquashMate GUI starting up')
-        
+
         self.init_ui()
         self.refresh_installed_apps()
-        
+
         # Removed desktop entries update checks
         
     def init_ui(self):
         """Initialize the user interface."""
-        self.setWindowTitle("SquashMate - AppImage Manager")
+        self.setWindowTitle("SquashMate - AppImage & Deb Package Manager")
         self.setGeometry(100, 100, 800, 600)
         self.setMinimumSize(700, 500)
         
@@ -631,18 +1044,19 @@ class SquashMateGUI(QMainWindow):
         title.setStyleSheet("font-size: 24px; font-weight: bold; color: #2E7D32; margin-bottom: 10px;")
         layout.addWidget(title)
         
-        subtitle = QLabel("AppImage Installation Manager")
+        subtitle = QLabel("AppImage & Deb Package Manager")
         subtitle.setAlignment(Qt.AlignCenter)
         subtitle.setStyleSheet("font-size: 14px; color: #666; margin-bottom: 20px;")
         layout.addWidget(subtitle)
-        
+
         # Create tab widget
         self.tab_widget = QTabWidget()
         layout.addWidget(self.tab_widget)
-        
-        # Install tab
+
+        # Install tabs
         self.create_install_tab()
-        
+        self.create_deb_install_tab()
+
         # Manage tab
         self.create_manage_tab()
         
@@ -768,7 +1182,118 @@ class SquashMateGUI(QMainWindow):
         layout.addStretch()
         
         self.tab_widget.addTab(install_widget, "Install AppImage")
-    
+
+    def create_deb_install_tab(self):
+        """Create the .deb installation tab."""
+        deb_install_widget = QWidget()
+        layout = QVBoxLayout(deb_install_widget)
+        layout.setSpacing(20)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        # File selection section
+        file_section = QFrame()
+        file_section.setFrameStyle(QFrame.Box)
+        file_section.setStyleSheet("""
+            QFrame {
+                background-color: #f8f9fa;
+                border-radius: 10px;
+                padding: 20px;
+                border: 2px solid #e9ecef;
+                min-height: 80px;
+            }
+        """)
+        file_layout = QVBoxLayout(file_section)
+        file_layout.setSpacing(10)
+        file_layout.setContentsMargins(10, 15, 10, 15)
+
+        self.deb_file_label = QLabel("No .deb package selected")
+        self.deb_file_label.setStyleSheet("""
+            color: #6c757d;
+            font-style: italic;
+            font-size: 14px;
+            padding: 5px 0px;
+            min-height: 20px;
+        """)
+        self.deb_file_label.setWordWrap(True)
+        file_layout.addWidget(self.deb_file_label)
+
+        self.select_deb_button = QPushButton("Select .deb Package")
+        self.select_deb_button.clicked.connect(self.select_deb_package)
+        self.select_deb_button.setStyleSheet("""
+            QPushButton {
+                background-color: #28a745;
+                color: white;
+                border: none;
+                padding: 15px 20px;
+                border-radius: 6px;
+                font-size: 14px;
+                font-weight: bold;
+                min-height: 25px;
+            }
+            QPushButton:hover {
+                background-color: #218838;
+            }
+        """)
+        file_layout.addWidget(self.select_deb_button)
+
+        layout.addWidget(file_section)
+
+        # Install action area (stacked: button <-> progress bar)
+        self.deb_install_button = QPushButton("Install .deb Package")
+        self.deb_install_button.clicked.connect(self.install_deb_package)
+        self.deb_install_button.setEnabled(False)
+        self.deb_install_button.setStyleSheet("""
+            QPushButton {
+                background-color: #dc3545;
+                color: white;
+                border: none;
+                padding: 18px 20px;
+                border-radius: 6px;
+                font-size: 16px;
+                font-weight: bold;
+                min-height: 30px;
+            }
+            QPushButton:hover:enabled {
+                background-color: #c82333;
+            }
+            QPushButton:disabled {
+                background-color: #6c757d;
+                color: #ffffff;
+            }
+        """)
+
+        self.deb_install_action_container = QWidget()
+        self.deb_install_action_stack = QStackedLayout(self.deb_install_action_container)
+
+        # Page 1: Button
+        self.deb_install_action_stack.addWidget(self.deb_install_button)
+
+        # Page 2: Progress bar
+        self.deb_progress_bar = QProgressBar()
+        self.deb_progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid #dee2e6;
+                border-radius: 5px;
+                text-align: center;
+                height: 25px;
+                background-color: #f8f9fa;
+            }
+            QProgressBar::chunk {
+                background-color: #dc3545;
+                border-radius: 3px;
+            }
+        """)
+        self.deb_progress_bar.setValue(0)
+        self.deb_install_action_stack.addWidget(self.deb_progress_bar)
+        self.deb_install_action_stack.setCurrentWidget(self.deb_install_button)
+
+        layout.addWidget(self.deb_install_action_container)
+
+        # Add stretch to push everything to top
+        layout.addStretch()
+
+        self.tab_widget.addTab(deb_install_widget, "Install .deb")
+
     def create_manage_tab(self):
         """Create the management tab."""
         manage_widget = QWidget()
@@ -905,40 +1430,165 @@ class SquashMateGUI(QMainWindow):
         
         # Clean up thread
         self.installer_thread = None
-    
+
+    def select_deb_package(self):
+        """Open file dialog to select .deb package."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select .deb Package",
+            "",
+            ".deb files (*.deb);;All files (*)"
+        )
+
+        if file_path:
+            self.deb_path = file_path
+            self.deb_file_label.setText(f"Selected: {Path(file_path).name}")
+            self.deb_file_label.setStyleSheet("""
+                color: #28a745;
+                font-weight: bold;
+                font-size: 14px;
+                padding: 5px 0px;
+                min-height: 20px;
+            """)
+            self.deb_install_button.setEnabled(True)
+            self.status_log.append(f"Selected .deb package: {file_path}")
+            self.logger.log_operation('info', f"Selected .deb package for installation: {file_path}")
+
+    def install_deb_package(self):
+        """Start the .deb installation process."""
+        if not self.deb_path:
+            return
+
+        # Disable buttons during installation
+        self.deb_install_button.setEnabled(False)
+        self.select_deb_button.setEnabled(False)
+        # Swap button -> progress bar without shifting layout
+        self.deb_install_action_stack.setCurrentWidget(self.deb_progress_bar)
+        self.deb_progress_bar.setValue(0)
+
+        # Clear log
+        self.status_log.clear()
+        self.status_log.append("Starting .deb installation...")
+
+        # Start installer thread
+        self.deb_installer_thread = DebInstaller(self.deb_path)
+        self.deb_installer_thread.status_update.connect(self.update_deb_status)
+        self.deb_installer_thread.progress_update.connect(self.update_deb_progress)
+        self.deb_installer_thread.finished_signal.connect(self.deb_installation_finished)
+        self.deb_installer_thread.start()
+
+    def update_deb_status(self, message):
+        """Update status log with new message for .deb installation."""
+        self.status_log.append(message)
+        self.status_log.ensureCursorVisible()
+
+    def update_deb_progress(self, value):
+        """Update progress bar for .deb installation."""
+        self.deb_progress_bar.setValue(value)
+
+    def deb_installation_finished(self, success, message):
+        """Handle .deb installation completion."""
+        # Re-enable buttons
+        self.deb_install_button.setEnabled(True)
+        self.select_deb_button.setEnabled(True)
+        # Swap progress bar -> button
+        self.deb_install_action_stack.setCurrentWidget(self.deb_install_button)
+
+        # Show result message
+        if success:
+            QMessageBox.information(self, "Success", message)
+            self.status_log.append("\n✅ .deb installation completed successfully!")
+
+            # Reset the interface to initial state for next installation
+            self.deb_path = None
+            self.deb_file_label.setText("No .deb package selected")
+            self.deb_file_label.setStyleSheet("""
+                color: #6c757d;
+                font-style: italic;
+                font-size: 14px;
+                padding: 5px 0px;
+                min-height: 20px;
+            """)
+            self.deb_install_button.setEnabled(False)
+
+            # Refresh the installed apps list
+            self.refresh_installed_apps()
+        else:
+            QMessageBox.critical(self, "Error", f".deb installation failed: {message}")
+            self.status_log.append(f"\n❌ .deb installation failed: {message}")
+
+        # Log the installation result
+        if success:
+            # Extract package info for logging
+            package_info = self.deb_installer_thread.get_package_info() if hasattr(self.deb_installer_thread, 'get_package_info') else None
+            if package_info:
+                package_name = package_info.get('Package', 'Unknown')
+                version = package_info.get('Version', 'Unknown')
+                self.logger.log_deb_installation(package_name, version, success=True)
+            else:
+                self.logger.log_operation('info', f".deb installation successful: {message}")
+        else:
+            self.logger.log_operation('error', f".deb installation failed: {message}")
+
+        # Clean up thread
+        self.deb_installer_thread = None
+
     def refresh_installed_apps(self):
-        """Refresh the list of installed applications."""
+        """Refresh the list of installed applications and packages."""
         try:
             self.apps_list.clear()
-            installed_apps = InstalledAppsManager.get_installed_apps()
-            
-            if not installed_apps:
-                item = QListWidgetItem("No applications installed")
+            installed_items = InstalledAppsManager.get_combined_installed_items()
+
+            if not installed_items:
+                item = QListWidgetItem("No applications or packages installed")
                 item.setData(Qt.UserRole, None)
                 self.apps_list.addItem(item)
-                self.status_log.append("No installed applications found.")
+                self.status_log.append("No installed applications or packages found.")
                 return
-            
-            for app in installed_apps:
-                # Create display text with app name and size
-                display_text = f"{app['name']} ({app['size']} MB)"
-                item = QListWidgetItem(display_text)
-                item.setData(Qt.UserRole, app)
-                self.apps_list.addItem(item)
-            
-            self.status_log.append(f"Found {len(installed_apps)} installed application(s).")
-            
+
+            appimage_count = 0
+            deb_count = 0
+
+            for item in installed_items:
+                # Create display text with item name, size, and type
+                if item['type'] == 'appimage':
+                    display_text = f"📦 {item['name']} ({item['size']} MB) [AppImage]"
+                    appimage_count += 1
+                else:  # deb package
+                    display_text = f"📋 {item['name']} ({item.get('version', 'N/A')}) [.deb]"
+                    deb_count += 1
+
+                list_item = QListWidgetItem(display_text)
+                list_item.setData(Qt.UserRole, item)
+                self.apps_list.addItem(list_item)
+
+            self.status_log.append(f"Found {appimage_count} AppImage(s) and {deb_count} .deb package(s).")
+
         except Exception as e:
             self.status_log.append(f"Error refreshing apps list: {str(e)}")
     
     def on_app_selection_changed(self):
-        """Handle app selection change."""
+        """Handle app/package selection change."""
         current_item = self.apps_list.currentItem()
         if current_item and current_item.data(Qt.UserRole):
-            self.launch_button.setEnabled(True)
+            item_data = current_item.data(Qt.UserRole)
+            item_type = item_data.get('type')
+
+            # Enable/disable buttons based on item type
+            if item_type == 'appimage':
+                self.launch_button.setEnabled(True)
+                self.launch_button.setText("Launch")
+            elif item_type == 'deb':
+                self.launch_button.setEnabled(False)  # .deb packages can't be "launched" like AppImages
+                self.launch_button.setText("Launch (N/A)")
+            else:
+                self.launch_button.setEnabled(False)
+                self.launch_button.setText("Launch")
+
             self.uninstall_button.setEnabled(True)
         else:
             self.launch_button.setEnabled(False)
+            self.launch_button.setText("Launch")
             self.uninstall_button.setEnabled(False)
     
     def launch_selected_app(self):
@@ -946,13 +1596,20 @@ class SquashMateGUI(QMainWindow):
         current_item = self.apps_list.currentItem()
         if not current_item:
             return
-            
-        app_data = current_item.data(Qt.UserRole)
-        if not app_data:
+
+        item_data = current_item.data(Qt.UserRole)
+        if not item_data:
             return
-        
-        app_name = app_data['name']
-        apprun_path = app_data['apprun']
+
+        item_type = item_data.get('type')
+
+        # Only launch AppImages, not .deb packages
+        if item_type != 'appimage':
+            QMessageBox.information(self, "Info", ".deb packages cannot be launched like applications.\n\n.deb packages provide system libraries or services that are automatically used by other applications.")
+            return
+
+        app_name = item_data['name']
+        apprun_path = item_data['apprun']
         command_with_sandbox = [apprun_path, '--no-sandbox']
         command_without_sandbox = [apprun_path]
         
@@ -1044,67 +1701,95 @@ class SquashMateGUI(QMainWindow):
             QMessageBox.critical(self, "Launch Error", error_msg)
     
     def uninstall_selected_app(self):
-        """Uninstall the selected application."""
+        """Uninstall the selected application or package."""
         current_item = self.apps_list.currentItem()
         if not current_item:
             return
-            
-        app_data = current_item.data(Qt.UserRole)
-        if not app_data:
+
+        item_data = current_item.data(Qt.UserRole)
+        if not item_data:
             return
-        
-        app_name = app_data['name']
-        
+
+        item_name = item_data['name']
+        item_type = item_data.get('type')
+
+        # Prepare confirmation message based on item type
+        if item_type == 'appimage':
+            confirm_message = (
+                f"Are you sure you want to uninstall '{item_name}'?\n\n"
+                f"This will remove:\n"
+                f"• Application files from ~/Applications/{item_name}\n"
+                f"• Desktop entry from applications menu\n"
+                f"• User configuration will be preserved"
+            )
+            final_confirm_text = f"Type the app name exactly to confirm: {item_name}"
+        else:  # deb package
+            confirm_message = (
+                f"Are you sure you want to uninstall '{item_name}'?\n\n"
+                f"This will remove the .deb package and its system files.\n"
+                f"⚠️  Warning: This may affect other applications that depend on this package."
+            )
+            final_confirm_text = f"Type the package name exactly to confirm: {item_name}"
+
         # First confirmation
         reply = QMessageBox.question(
             self,
             "Confirm Uninstall",
-            f"Are you sure you want to uninstall '{app_name}'?\n\n"
-            f"This will remove:\n"
-            f"• Application files from ~/Applications/{app_name}\n"
-            f"• Desktop entry from applications menu\n"
-            f"• User configuration will be preserved",
+            confirm_message,
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
 
         if reply == QMessageBox.Yes:
             # Second stricter confirmation
-            confirm_text = (
-                f"This action cannot be undone.\n\n"
-                f"Type the app name exactly to confirm: {app_name}"
-            )
             text, ok = QInputDialog.getText(
                 self,
                 "Final Confirmation",
-                confirm_text
+                final_confirm_text
             )
 
-            if not ok or text.strip() != app_name:
+            if not ok or text.strip() != item_name:
                 QMessageBox.information(self, "Cancelled", "Uninstall cancelled.")
                 return
 
             try:
-                self.status_log.append(f"Uninstalling {app_name}...")
-                
-                result = InstalledAppsManager.uninstall_app(app_name)
-                
-                if result == True:
-                    self.status_log.append(f"✅ {app_name} uninstalled successfully!")
-                    QMessageBox.information(self, "Success", f"{app_name} has been uninstalled successfully!")
+                self.status_log.append(f"Uninstalling {item_name}...")
+
+                # Handle uninstallation based on item type
+                if item_type == 'appimage':
+                    result = InstalledAppsManager.uninstall_app(item_name)
+                    success = result == True
+                    error_msg = None if success else (result[1] if isinstance(result, tuple) else "Unknown error")
+                else:  # deb package
+                    success, error_msg = InstalledAppsManager.uninstall_deb_package(item_name)
+
+                if success:
+                    self.status_log.append(f"✅ {item_name} uninstalled successfully!")
+                    QMessageBox.information(self, "Success", f"{item_name} has been uninstalled successfully!")
+
+                    # Log the uninstallation
+                    if item_type == 'deb':
+                        self.logger.log_deb_uninstallation(item_name, success=True)
+
                     # Refresh the list
                     self.refresh_installed_apps()
                 else:
-                    error_msg = f"Failed to uninstall {app_name}"
-                    if isinstance(result, tuple):
-                        error_msg += f": {result[1]}"
+                    error_msg = f"Failed to uninstall {item_name}" + (f": {error_msg}" if error_msg else "")
                     self.status_log.append(f"❌ {error_msg}")
                     QMessageBox.critical(self, "Uninstall Error", error_msg)
-                
+
+                    # Log the failed uninstallation
+                    if item_type == 'deb':
+                        self.logger.log_deb_uninstallation(item_name, success=False, error_output=error_msg)
+
             except Exception as e:
-                error_msg = f"Failed to uninstall {app_name}: {str(e)}"
+                error_msg = f"Failed to uninstall {item_name}: {str(e)}"
                 self.status_log.append(f"❌ {error_msg}")
                 QMessageBox.critical(self, "Uninstall Error", error_msg)
+
+                # Log the failed uninstallation
+                if item_type == 'deb':
+                    self.logger.log_deb_uninstallation(item_name, success=False, error_output=error_msg)
     
 
     
