@@ -798,10 +798,70 @@ class InstalledAppsManager:
             if app_dir.exists():
                 shutil.rmtree(app_dir)
             
-            # Remove desktop file
-            desktop_file = InstalledAppsManager.get_desktop_file(app_name)
-            if desktop_file and os.path.exists(desktop_file):
-                os.remove(desktop_file)
+            # Remove desktop files from all common locations
+            desktop_locations = [
+                Path.home() / ".local" / "share" / "applications",
+                Path("/usr/share/applications"),  # System-wide (requires sudo, but we try)
+            ]
+            
+            desktop_file_removed = False
+            for desktop_dir in desktop_locations:
+                desktop_file = desktop_dir / f"{app_name}.desktop"
+                if desktop_file.exists():
+                    try:
+                        desktop_file.unlink()
+                        desktop_file_removed = True
+                    except PermissionError:
+                        # System-wide desktop files require sudo - skip silently
+                        pass
+                    except Exception:
+                        pass
+            
+            # Remove associated icon files from common locations
+            icon_locations = [
+                Path.home() / ".local" / "share" / "icons",
+                Path("/usr/share/pixmaps"),  # System-wide icons
+            ]
+            
+            icon_extensions = ['.png', '.svg', '.xpm', '.ico']
+            for icon_dir in icon_locations:
+                if icon_dir.exists():
+                    for ext in icon_extensions:
+                        icon_file = icon_dir / f"{app_name}{ext}"
+                        if icon_file.exists():
+                            try:
+                                icon_file.unlink()
+                            except PermissionError:
+                                # System-wide icons require sudo - skip silently
+                                pass
+                            except Exception:
+                                pass
+            
+            # Also check for icons in subdirectories (e.g., hicolor theme)
+            hicolor_icon_dir = Path.home() / ".local" / "share" / "icons" / "hicolor"
+            if hicolor_icon_dir.exists():
+                for size_dir in hicolor_icon_dir.iterdir():
+                    if size_dir.is_dir():
+                        apps_icon_dir = size_dir / "apps"
+                        if apps_icon_dir.exists():
+                            for ext in icon_extensions:
+                                icon_file = apps_icon_dir / f"{app_name}{ext}"
+                                if icon_file.exists():
+                                    try:
+                                        icon_file.unlink()
+                                    except Exception:
+                                        pass
+            
+            # Update desktop database to refresh menu
+            if desktop_file_removed:
+                try:
+                    # Update user desktop database
+                    desktop_dir = Path.home() / ".local" / "share" / "applications"
+                    if desktop_dir.exists():
+                        subprocess.run(['update-desktop-database', str(desktop_dir)], 
+                                     capture_output=True, timeout=5)
+                except Exception:
+                    pass  # Ignore errors updating database
             
             # Clean up launcher wrapper if no more apps are installed
             InstalledAppsManager.cleanup_launcher_if_needed()
@@ -888,10 +948,76 @@ class InstalledAppsManager:
             result = subprocess.run(['pkexec', 'apt-get', 'remove', '-y', package_name],
                                   capture_output=True, text=True)
 
-            return result.returncode == 0, result.stderr if result.returncode != 0 else None
+            if result.returncode == 0:
+                # Clean up any remaining desktop entries and icons
+                InstalledAppsManager.cleanup_desktop_entries(package_name)
+                
+                # Update desktop database
+                try:
+                    desktop_dir = Path.home() / ".local" / "share" / "applications"
+                    if desktop_dir.exists():
+                        subprocess.run(['update-desktop-database', str(desktop_dir)], 
+                                     capture_output=True, timeout=5)
+                except Exception:
+                    pass  # Ignore errors updating database
+                
+                return True, None
+            else:
+                return False, result.stderr
 
         except Exception as e:
             return False, str(e)
+    
+    @staticmethod
+    def cleanup_desktop_entries(app_name):
+        """Clean up desktop entries and icons for an application."""
+        try:
+            # Remove desktop files from common locations
+            desktop_locations = [
+                Path.home() / ".local" / "share" / "applications",
+            ]
+            
+            for desktop_dir in desktop_locations:
+                desktop_file = desktop_dir / f"{app_name}.desktop"
+                if desktop_file.exists():
+                    try:
+                        desktop_file.unlink()
+                    except Exception:
+                        pass
+            
+            # Remove associated icon files
+            icon_locations = [
+                Path.home() / ".local" / "share" / "icons",
+            ]
+            
+            icon_extensions = ['.png', '.svg', '.xpm', '.ico']
+            for icon_dir in icon_locations:
+                if icon_dir.exists():
+                    # Check root icon directory
+                    for ext in icon_extensions:
+                        icon_file = icon_dir / f"{app_name}{ext}"
+                        if icon_file.exists():
+                            try:
+                                icon_file.unlink()
+                            except Exception:
+                                pass
+                    
+                    # Check hicolor theme subdirectories
+                    hicolor_dir = icon_dir / "hicolor"
+                    if hicolor_dir.exists():
+                        for size_dir in hicolor_dir.iterdir():
+                            if size_dir.is_dir():
+                                apps_icon_dir = size_dir / "apps"
+                                if apps_icon_dir.exists():
+                                    for ext in icon_extensions:
+                                        icon_file = apps_icon_dir / f"{app_name}{ext}"
+                                        if icon_file.exists():
+                                            try:
+                                                icon_file.unlink()
+                                            except Exception:
+                                                pass
+        except Exception:
+            pass  # Ignore cleanup errors
 
     @staticmethod
     def get_package_info(package_name):
@@ -1777,7 +1903,8 @@ class SquashMateGUI(QMainWindow):
 
         app_name = item_data['name']
         apprun_path = item_data['apprun']
-        command_with_sandbox = [apprun_path, '--no-sandbox']
+        # Use both sandbox flags to fix sandbox issues: --no-sandbox --disable-setuid-sandbox
+        command_with_sandbox = [apprun_path, '--no-sandbox', '--disable-setuid-sandbox']
         command_without_sandbox = [apprun_path]
         
         # Get the directory containing AppRun - critical for APPDIR resolution
@@ -1802,11 +1929,12 @@ class SquashMateGUI(QMainWindow):
                 stdout, stderr = process.communicate(timeout=2)
                 # If we get here, the process finished quickly
                 if process.returncode != 0:
-                    # Check if the error is about unknown --no-sandbox option
+                    # Check if the error is about unknown sandbox flags
                     error_output = stderr or stdout or ""
-                    if "no-sandbox" in error_output.lower() and "unknown" in error_output.lower():
-                        # Try without --no-sandbox
-                        self.status_log.append(f"Retrying {app_name} without --no-sandbox flag...")
+                    if (("no-sandbox" in error_output.lower() and "unknown" in error_output.lower()) or
+                        ("disable-setuid-sandbox" in error_output.lower() and "unknown" in error_output.lower())):
+                        # Try without sandbox flags
+                        self.status_log.append(f"Retrying {app_name} without sandbox flags...")
                         final_command = command_without_sandbox
                         
                         process = subprocess.Popen(

@@ -70,8 +70,9 @@ def main():
     # Get the directory containing AppRun - critical for APPDIR resolution
     apprun_dir = os.path.dirname(os.path.abspath(apprun_path))
     
-    # Prepare command - try with --no-sandbox first, fallback without it
-    command_with_sandbox = [apprun_path, '--no-sandbox'] + additional_args
+    # Prepare command - try with sandbox flags first, fallback without them
+    # These flags fix sandbox issues: --no-sandbox --disable-setuid-sandbox
+    command_with_sandbox = [apprun_path, '--no-sandbox', '--disable-setuid-sandbox'] + additional_args
     command_without_sandbox = [apprun_path] + additional_args
     
     try:
@@ -106,11 +107,12 @@ def main():
                 stdout, stderr = process.communicate(timeout=3)
                 
                 if process.returncode != 0:
-                    # Check if the error is about unknown --no-sandbox option
+                    # Check if the error is about unknown sandbox flags
                     error_output = stderr or stdout or ""
-                    if "no-sandbox" in error_output.lower() and "unknown" in error_output.lower():
-                        # Try without --no-sandbox
-                        print("Retrying without --no-sandbox flag...")
+                    if (("no-sandbox" in error_output.lower() and "unknown" in error_output.lower()) or
+                        ("disable-setuid-sandbox" in error_output.lower() and "unknown" in error_output.lower())):
+                        # Try without sandbox flags
+                        print("Retrying without sandbox flags...")
                         final_command = command_without_sandbox
                         
                         process = subprocess.Popen(
