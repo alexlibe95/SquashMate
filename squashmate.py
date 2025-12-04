@@ -15,9 +15,9 @@ from pathlib import Path
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, 
                             QWidget, QPushButton, QLabel, QTextEdit, QFileDialog, 
                             QMessageBox, QProgressBar, QFrame, QListWidget, QListWidgetItem,
-                            QTabWidget, QSplitter, QGroupBox, QGridLayout, QInputDialog, QStackedLayout)
+                            QTabWidget, QSplitter, QGroupBox, QGridLayout, QInputDialog, QStackedLayout, QSizePolicy)
 from PyQt5.QtCore import QThread, pyqtSignal, Qt, QTimer
-from PyQt5.QtGui import QFont, QPalette, QColor, QIcon
+from PyQt5.QtGui import QFont, QPalette, QColor, QIcon, QCursor
 
 
 class SquashMateLogger:
@@ -942,92 +942,152 @@ class SquashMateGUI(QMainWindow):
     def init_ui(self):
         """Initialize the user interface."""
         self.setWindowTitle("SquashMate - AppImage & Deb Package Manager")
-        self.setGeometry(100, 100, 800, 600)
-        self.setMinimumSize(700, 500)
+        self.setGeometry(100, 100, 1000, 750)  # Larger window: 1000x750
+        self.setMinimumSize(900, 650)
         
         # Apply modern styling
         self.setStyleSheet("""
             QMainWindow {
-                background-color: #f5f5f5;
+                background-color: #FAFAFA;
             }
+            
+            /* Modern Button Styling */
             QPushButton {
-                background-color: #4CAF50;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #00E676, stop:1 #00C853);
                 color: white;
                 border: none;
-                padding: 10px 20px;
-                border-radius: 5px;
+                padding: 12px 24px;
+                border-radius: 8px;
                 font-size: 14px;
-                font-weight: bold;
+                font-weight: 600;
             }
             QPushButton:hover {
-                background-color: #45a049;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #00E676, stop:1 #00B248);
+            }
+            QPushButton:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #00C853, stop:1 #009624);
+                padding: 13px 24px 11px 24px;
             }
             QPushButton:disabled {
-                background-color: #cccccc;
-                color: #666666;
+                background: #E0E0E0;
+                color: #9E9E9E;
             }
-            QPushButton.danger {
-                background-color: #f44336;
+            
+            /* Danger Button Variant */
+            QPushButton[class="danger"] {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #FF6E40, stop:1 #FF3D00);
             }
-            QPushButton.danger:hover {
-                background-color: #d32f2f;
+            QPushButton[class="danger"]:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #FF6E40, stop:1 #DD2C00);
             }
-            QPushButton.danger:disabled {
-                background-color: #e9ecef;
-                color: #6c757d;
+            QPushButton[class="danger"]:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #FF3D00, stop:1 #BF360C);
             }
+            QPushButton[class="danger"]:disabled {
+                background: #E0E0E0;
+                color: #9E9E9E;
+            }
+            
+            /* Label Styling */
             QLabel {
-                color: #333333;
+                color: #212121;
                 font-size: 14px;
             }
+            
+            /* Text Edit Styling */
             QTextEdit {
                 background-color: white;
-                border: 1px solid #ddd;
-                border-radius: 5px;
-                padding: 10px;
-                font-family: 'Courier New', monospace;
+                border: 2px solid #E0E0E0;
+                border-radius: 8px;
+                padding: 12px;
+                font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
                 font-size: 12px;
+                color: #212121;
             }
+            QTextEdit:focus {
+                border: 2px solid #00C853;
+            }
+            
+            /* List Widget Styling */
             QListWidget {
                 background-color: white;
-                border: 1px solid #ddd;
-                border-radius: 5px;
-                padding: 5px;
+                border: 2px solid #E0E0E0;
+                border-radius: 8px;
+                padding: 8px;
                 font-size: 13px;
+                outline: none;
+            }
+            QListWidget:focus {
+                border: 2px solid #00C853;
             }
             QListWidget::item {
-                padding: 8px;
-                border-bottom: 1px solid #eee;
+                padding: 12px;
+                border-radius: 6px;
+                margin: 2px 0px;
+            }
+            QListWidget::item:hover {
+                background-color: #F5F5F5;
             }
             QListWidget::item:selected {
-                background-color: #e3f2fd;
-                color: #1976d2;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #E8F5E9, stop:1 #C8E6C9);
+                color: #1B5E20;
+                font-weight: 600;
             }
+            
+            /* Progress Bar Styling */
             QProgressBar {
-                border: 1px solid #ddd;
-                border-radius: 5px;
+                border: 2px solid #E0E0E0;
+                border-radius: 8px;
                 text-align: center;
-                height: 25px;
+                height: 28px;
+                background-color: white;
+                color: #212121;
+                font-weight: 600;
             }
             QProgressBar::chunk {
-                background-color: #4CAF50;
-                border-radius: 4px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #00E676, stop:1 #00C853);
+                border-radius: 6px;
             }
+            
+            /* Tab Widget Styling */
             QTabWidget::pane {
-                border: 1px solid #ddd;
+                border: 2px solid #E0E0E0;
                 background-color: white;
-                border-radius: 5px;
+                border-radius: 8px;
+                top: -2px;
             }
             QTabBar::tab {
-                background-color: #e0e0e0;
-                padding: 10px 20px;
-                margin-right: 2px;
-                border-top-left-radius: 5px;
-                border-top-right-radius: 5px;
+                background-color: #F5F5F5;
+                color: #757575;
+                padding: 14px 28px;  /* Increased padding */
+                margin-right: 4px;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+                font-weight: 600;
+                min-width: 140px;  /* Wider tabs */
+                font-size: 14px;
+            }
+            QTabBar::tab:hover {
+                background-color: #EEEEEE;
+                color: #424242;
             }
             QTabBar::tab:selected {
                 background-color: white;
-                border-bottom: 2px solid #4CAF50;
+                color: #00C853;
+                border-bottom: 3px solid #00C853;
+            }
+            
+            /* Frame Styling */
+            QFrame {
+                border-radius: 8px;
             }
         """)
         
@@ -1035,18 +1095,29 @@ class SquashMateGUI(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         layout = QVBoxLayout(central_widget)
-        layout.setSpacing(20)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(25)  # Increased spacing
+        layout.setContentsMargins(30, 25, 30, 25)  # More breathing room
         
         # Title
         title = QLabel("SquashMate")
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-size: 24px; font-weight: bold; color: #2E7D32; margin-bottom: 10px;")
+        title.setStyleSheet("""
+            font-size: 32px; 
+            font-weight: bold; 
+            color: #00C853; 
+            margin-bottom: 5px;
+            padding: 10px;
+        """)
         layout.addWidget(title)
         
         subtitle = QLabel("AppImage & Deb Package Manager")
         subtitle.setAlignment(Qt.AlignCenter)
-        subtitle.setStyleSheet("font-size: 14px; color: #666; margin-bottom: 20px;")
+        subtitle.setStyleSheet("""
+            font-size: 15px; 
+            color: #757575; 
+            margin-bottom: 20px;
+            font-weight: 500;
+        """)
         layout.addWidget(subtitle)
 
         # Create tab widget
@@ -1076,8 +1147,8 @@ class SquashMateGUI(QMainWindow):
         """Create the installation tab."""
         install_widget = QWidget()
         layout = QVBoxLayout(install_widget)
-        layout.setSpacing(20)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(25)  # More spacing
+        layout.setContentsMargins(30, 25, 30, 25)
         
         # File selection section
         file_section = QFrame()
@@ -1088,7 +1159,7 @@ class SquashMateGUI(QMainWindow):
                 border-radius: 10px; 
                 padding: 20px; 
                 border: 2px solid #e9ecef;
-                min-height: 80px;
+                min-height: 120px;  /* Taller section */
             }
         """)
         file_layout = QVBoxLayout(file_section)
@@ -1108,46 +1179,58 @@ class SquashMateGUI(QMainWindow):
         
         self.select_button = QPushButton("Select AppImage")
         self.select_button.clicked.connect(self.select_appimage)
+        self.select_button.setCursor(QCursor(Qt.PointingHandCursor))
         self.select_button.setStyleSheet("""
             QPushButton {
-                background-color: #28a745;
+                background-color: #0288D1;
                 color: white;
                 border: none;
-                padding: 15px 20px;
-                border-radius: 6px;
-                font-size: 14px;
-                font-weight: bold;
-                min-height: 25px;
+                padding: 16px 24px;
+                border-radius: 8px;
+                font-size: 15px;
+                font-weight: 600;
+                min-height: 45px;
             }
             QPushButton:hover {
-                background-color: #218838;
+                background-color: #0277BD;
+            }
+            QPushButton:pressed {
+                background-color: #01579B;
             }
         """)
         file_layout.addWidget(self.select_button)
         
         layout.addWidget(file_section)
+        layout.addSpacing(20)
         
         # Install action area (stacked: button <-> progress bar)
-        self.install_button = QPushButton("Install/Update Application")
+        self.install_button = QPushButton("⚡ Install/Update Application")
         self.install_button.clicked.connect(self.install_appimage)
         self.install_button.setEnabled(False)
+        self.install_button.setCursor(QCursor(Qt.PointingHandCursor))
         self.install_button.setStyleSheet("""
             QPushButton {
-                background-color: #007bff;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #00E676, stop:1 #00C853);
                 color: white;
                 border: none;
-                padding: 18px 20px;
-                border-radius: 6px;
+                padding: 18px 24px;
+                border-radius: 8px;
                 font-size: 16px;
-                font-weight: bold;
+                font-weight: 700;
                 min-height: 30px;
             }
             QPushButton:hover:enabled {
-                background-color: #0056b3;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #00E676, stop:1 #00B248);
+            }
+            QPushButton:pressed:enabled {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #00C853, stop:1 #009624);
             }
             QPushButton:disabled {
-                background-color: #6c757d;
-                color: #ffffff;
+                background: #E0E0E0;
+                color: #9E9E9E;
             }
         """)
 
@@ -1187,8 +1270,8 @@ class SquashMateGUI(QMainWindow):
         """Create the .deb installation tab."""
         deb_install_widget = QWidget()
         layout = QVBoxLayout(deb_install_widget)
-        layout.setSpacing(20)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(25)  # More spacing
+        layout.setContentsMargins(30, 25, 30, 25)
 
         # File selection section
         file_section = QFrame()
@@ -1199,7 +1282,7 @@ class SquashMateGUI(QMainWindow):
                 border-radius: 10px;
                 padding: 20px;
                 border: 2px solid #e9ecef;
-                min-height: 80px;
+                min-height: 120px;  /* Taller section */
             }
         """)
         file_layout = QVBoxLayout(file_section)
@@ -1219,46 +1302,58 @@ class SquashMateGUI(QMainWindow):
 
         self.select_deb_button = QPushButton("Select .deb Package")
         self.select_deb_button.clicked.connect(self.select_deb_package)
+        self.select_deb_button.setCursor(QCursor(Qt.PointingHandCursor))
         self.select_deb_button.setStyleSheet("""
             QPushButton {
-                background-color: #28a745;
+                background-color: #0288D1;
                 color: white;
                 border: none;
-                padding: 15px 20px;
-                border-radius: 6px;
-                font-size: 14px;
-                font-weight: bold;
-                min-height: 25px;
+                padding: 16px 24px;
+                border-radius: 8px;
+                font-size: 15px;
+                font-weight: 600;
+                min-height: 45px;
             }
             QPushButton:hover {
-                background-color: #218838;
+                background-color: #0277BD;
+            }
+            QPushButton:pressed {
+                background-color: #01579B;
             }
         """)
         file_layout.addWidget(self.select_deb_button)
 
         layout.addWidget(file_section)
+        layout.addSpacing(20)
 
         # Install action area (stacked: button <-> progress bar)
-        self.deb_install_button = QPushButton("Install .deb Package")
+        self.deb_install_button = QPushButton("📦 Install .deb Package")
         self.deb_install_button.clicked.connect(self.install_deb_package)
         self.deb_install_button.setEnabled(False)
+        self.deb_install_button.setCursor(QCursor(Qt.PointingHandCursor))
         self.deb_install_button.setStyleSheet("""
             QPushButton {
-                background-color: #dc3545;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #AB47BC, stop:1 #8E24AA);
                 color: white;
                 border: none;
-                padding: 18px 20px;
-                border-radius: 6px;
+                padding: 18px 24px;
+                border-radius: 8px;
                 font-size: 16px;
-                font-weight: bold;
+                font-weight: 700;
                 min-height: 30px;
             }
             QPushButton:hover:enabled {
-                background-color: #c82333;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #AB47BC, stop:1 #7B1FA2);
+            }
+            QPushButton:pressed:enabled {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #8E24AA, stop:1 #6A1B9A);
             }
             QPushButton:disabled {
-                background-color: #6c757d;
-                color: #ffffff;
+                background: #E0E0E0;
+                color: #9E9E9E;
             }
         """)
 
@@ -1298,8 +1393,8 @@ class SquashMateGUI(QMainWindow):
         """Create the management tab."""
         manage_widget = QWidget()
         layout = QVBoxLayout(manage_widget)
-        layout.setSpacing(15)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(20)
+        layout.setContentsMargins(30, 25, 30, 25)
         
         # Header with refresh button
         header_layout = QHBoxLayout()
@@ -1311,34 +1406,106 @@ class SquashMateGUI(QMainWindow):
         
         self.refresh_button = QPushButton("Refresh")
         self.refresh_button.clicked.connect(self.refresh_installed_apps)
+        self.refresh_button.setCursor(QCursor(Qt.PointingHandCursor))
         header_layout.addWidget(self.refresh_button)
         
         layout.addLayout(header_layout)
         
-        # Installed apps list
+        # Installed apps list - Height will be constrained by layout (buttons height 50px + padding 5px)
         self.apps_list = QListWidget()
+        self.apps_list.setMinimumHeight(100)  # Minimum height for usability
+        self.apps_list.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)  # Allow expansion
         self.apps_list.itemSelectionChanged.connect(self.on_app_selection_changed)
-        layout.addWidget(self.apps_list)
         
-        # Action buttons
-        buttons_layout = QHBoxLayout()
+        # Store reference for height calculation
+        self.manage_widget_ref = manage_widget
         
-        self.launch_button = QPushButton("Launch")
+        # Function to update list height based on available space
+        def update_list_height():
+            try:
+                if hasattr(self, 'manage_widget_ref') and self.manage_widget_ref and self.apps_list:
+                    if self.manage_widget_ref.isVisible():
+                        widget_height = self.manage_widget_ref.height()
+                        buttons_height = 50
+                        padding = 5
+                        header_approx = 50
+                        margins = 50
+                        max_height = widget_height - buttons_height - padding - header_approx - margins
+                        if max_height > 200:
+                            self.apps_list.setMaximumHeight(max_height)
+            except Exception:
+                pass  # Ignore errors during widget initialization
+        
+        # Store update function for later use
+        self.update_list_height_func = update_list_height
+        
+        # Use timer to update height after widget is shown
+        QTimer.singleShot(200, update_list_height)
+        
+        layout.addWidget(self.apps_list, stretch=1)  # Stretch to fill available space
+        
+        # Small spacing before buttons (5px)
+        layout.addSpacing(5)
+        
+        # Action buttons container - Always visible, fixed position
+        buttons_frame = QFrame()
+        buttons_frame.setFrameShape(QFrame.NoFrame)
+        buttons_frame.setFixedHeight(50)
+        buttons_frame.setStyleSheet("QFrame { background-color: transparent; }")
+        buttons_layout = QHBoxLayout(buttons_frame)
+        buttons_layout.setContentsMargins(0, 0, 0, 0)
+        buttons_layout.setSpacing(15)
+        
+        self.launch_button = QPushButton("🚀 Launch")
         self.launch_button.clicked.connect(self.launch_selected_app)
         self.launch_button.setEnabled(False)
+        self.launch_button.setCursor(QCursor(Qt.PointingHandCursor))
+        self.launch_button.setFixedHeight(40)
+        self.launch_button.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #42A5F5, stop:1 #2196F3);
+                color: white;
+                padding: 10px 24px;
+                border-radius: 8px;
+                font-weight: 600;
+                font-size: 14px;
+            }
+            QPushButton:hover:enabled {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #42A5F5, stop:1 #1976D2);
+            }
+            QPushButton:disabled {
+                background: #E0E0E0;
+                color: #9E9E9E;
+            }
+        """)
         buttons_layout.addWidget(self.launch_button)
         
-        self.uninstall_button = QPushButton("Uninstall")
+        self.uninstall_button = QPushButton("🗑️ Uninstall")
         self.uninstall_button.setProperty("class", "danger")
         self.uninstall_button.clicked.connect(self.uninstall_selected_app)
         self.uninstall_button.setEnabled(False)
+        self.uninstall_button.setCursor(QCursor(Qt.PointingHandCursor))
+        self.uninstall_button.setFixedHeight(40)
         buttons_layout.addWidget(self.uninstall_button)
         
         buttons_layout.addStretch()
         
-        layout.addLayout(buttons_layout)
+        # Add the buttons frame to the main layout - NO STRETCH, fixed position
+        layout.addWidget(buttons_frame, stretch=0)
+        
+        # NO stretch at the end - let the status log take remaining space
         
         self.tab_widget.addTab(manage_widget, "Manage Installed")
+        
+        # Connect to tab change to update list height when tab is shown
+        def on_tab_changed(index):
+            if index == self.tab_widget.indexOf(manage_widget):
+                if hasattr(self, 'update_list_height_func'):
+                    QTimer.singleShot(100, self.update_list_height_func)
+        
+        self.tab_widget.currentChanged.connect(on_tab_changed)
     
 
         
