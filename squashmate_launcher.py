@@ -67,6 +67,9 @@ def main():
     # Setup logging
     log_dir, _ = setup_logging()
     
+    # Get the directory containing AppRun - critical for APPDIR resolution
+    apprun_dir = os.path.dirname(os.path.abspath(apprun_path))
+    
     # Prepare command - try with --no-sandbox first, fallback without it
     command_with_sandbox = [apprun_path, '--no-sandbox'] + additional_args
     command_without_sandbox = [apprun_path] + additional_args
@@ -94,7 +97,8 @@ def main():
                 command_with_sandbox,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True
+                text=True,
+                cwd=apprun_dir
             )
             
             # Give the process a moment to start and potentially fail immediately
@@ -113,7 +117,8 @@ def main():
                             command_without_sandbox,
                             stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE,
-                            text=True
+                            text=True,
+                            cwd=apprun_dir
                         )
                         
                         try:
@@ -130,7 +135,7 @@ def main():
                                 
                         except subprocess.TimeoutExpired:
                             # Process is still running - success
-                            process.kill()
+                            # Don't kill it! Just log success and let it continue running
                             log_launch_attempt(app_name, final_command, success=True, log_dir=log_dir)
                             success = True
                     else:
@@ -145,7 +150,7 @@ def main():
                     
             except subprocess.TimeoutExpired:
                 # Process is still running after timeout - this is good for GUI apps
-                process.kill()
+                # Don't kill it! Just log success and let it continue running
                 log_launch_attempt(app_name, final_command, success=True, log_dir=log_dir)
                 success = True
                 
@@ -158,7 +163,8 @@ def main():
                         command_without_sandbox,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
-                        text=True
+                        text=True,
+                        cwd=apprun_dir
                     )
                     
                     try:
@@ -173,7 +179,8 @@ def main():
                             success = True
                             
                     except subprocess.TimeoutExpired:
-                        process.kill()
+                        # Process is still running - success
+                        # Don't kill it! Just log success and let it continue running
                         log_launch_attempt(app_name, final_command, success=True, log_dir=log_dir)
                         success = True
                         

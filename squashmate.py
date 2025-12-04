@@ -1613,6 +1613,9 @@ class SquashMateGUI(QMainWindow):
         command_with_sandbox = [apprun_path, '--no-sandbox']
         command_without_sandbox = [apprun_path]
         
+        # Get the directory containing AppRun - critical for APPDIR resolution
+        apprun_dir = os.path.dirname(os.path.abspath(apprun_path))
+        
         try:
             self.status_log.append(f"Launching {app_name}...")
             self.logger.log_operation('info', f"Attempting to launch {app_name}")
@@ -1623,7 +1626,8 @@ class SquashMateGUI(QMainWindow):
                 command_with_sandbox,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True
+                text=True,
+                cwd=apprun_dir
             )
             
             # Give the process a moment to start and potentially fail immediately
@@ -1642,7 +1646,8 @@ class SquashMateGUI(QMainWindow):
                             command_without_sandbox,
                             stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE,
-                            text=True
+                            text=True,
+                            cwd=apprun_dir
                         )
                         
                         try:
@@ -1661,7 +1666,7 @@ class SquashMateGUI(QMainWindow):
                                 
                         except subprocess.TimeoutExpired:
                             # Process is still running - success
-                            process.kill()
+                            # Don't kill it! Just log success and let it continue running
                             self.logger.log_app_launch(app_name, final_command, success=True)
                             self.status_log.append(f"✅ {app_name} launched successfully!")
                     else:
@@ -1678,7 +1683,7 @@ class SquashMateGUI(QMainWindow):
                     
             except subprocess.TimeoutExpired:
                 # Process is still running after timeout - this is good for GUI apps
-                process.kill()  # Kill the subprocess since we're monitoring, the real app should continue
+                # Don't kill it! Just log success and let it continue running
                 self.logger.log_app_launch(app_name, final_command, success=True)
                 self.status_log.append(f"✅ {app_name} launched successfully!")
             
