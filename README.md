@@ -172,7 +172,11 @@ Desktop launches are marked as **Desktop Launch** in per-app logs.
 The app version lives in a single file: `VERSION` at the project root. To ship a new release:
 
 1. Edit `VERSION` (e.g. `1.0.0` → `1.1.0`).
-2. Commit and tag the release.
+2. Build release artifacts:
+   ```bash
+   ./build_release.sh
+   ```
+3. Commit and tag the release.
 
 That value is automatically picked up by:
 
@@ -181,6 +185,26 @@ That value is automatically picked up by:
 - `install_squashmate.sh`, which prints the version during install.
 
 No code edits are required to bump versions.
+
+`./build_release.sh` creates:
+
+- `dist/squashmate_<version>_all.deb`
+- `dist/squashmate-<version>-linux.tar.gz` (portable bundle; kept in `dist/` only)
+- `dist/latest.json` (manifest: version, `.deb` filename, download path, SHA256)
+
+It copies the website-ready downloads to:
+
+- `/home/alex/Desktop/Projects/squashMate-website/public/downloads`
+
+Website `public/downloads` contains **only** the `.deb` and `latest.json` (any previous `*.tar.gz` there is removed on each build) so your primary CTA can stay “Download for Linux” as a single Debian package.
+
+You can override that destination with environment variables:
+
+```bash
+WEBSITE_DIR=/path/to/site ./build_release.sh
+# or
+WEBSITE_DOWNLOADS_DIR=/path/to/site/public/downloads ./build_release.sh
+```
 
 ---
 
