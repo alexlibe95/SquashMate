@@ -1,181 +1,225 @@
-# SquashMate - AppImage & Deb Package Manager
+# SquashMate
 
-A simple and elegant desktop application for managing AppImage installations and .deb package installations on Linux systems.
+**SquashMate** is a Linux desktop app (PyQt5) that makes AppImage and `.deb` installation easier, with built-in logging, desktop integration, and safe uninstall flows.
 
-## Background
+It was built to remove repetitive package-management friction for tools that are commonly shipped as AppImages or `.deb` files.
 
-**Why SquashMate was created:**
+---
 
-I built SquashMate out of personal frustration with managing application updates on Linux. As a developer, I frequently use tools like **Cursor** (AI-powered code editor) and **Discord**, which often come as AppImages or .deb packages. The update process was always tedious:
+## Highlights
 
-- **AppImages**: Download, make executable, extract, create desktop entries manually
-- **.deb packages**: Terminal commands, dependency resolution, permission issues
+- Install or update AppImages into `~/Applications/<AppName>/`
+- Install `.deb` files with privilege escalation (`pkexec`) and dependency fix-up
+- Generate desktop entries for AppImages automatically
+- Launch AppImages from inside SquashMate
+- Uninstall AppImages and `.deb` packages with double confirmation
+- Capture detailed logs for installs, uninstalls, and launch failures
 
-One day, after spending 30 minutes wrestling with Cursor and Discord updates, I decided to create a proper GUI tool that would handle all of this automatically. SquashMate started as a simple script to update Cursor, but quickly evolved into a comprehensive package manager that works with any AppImage or .deb package.
+---
 
-**The name "SquashMate":**
-- "Squash" comes from the AppImage extraction process (squashfs filesystem)
-- "Mate" because it's your friendly companion for package management
+## Current Scope
 
-Now, what used to take 30+ minutes of terminal commands takes just a few clicks in a clean, intuitive interface. Whether you're updating Cursor, installing Discord, or managing any other Linux application, SquashMate makes it effortless.
+SquashMate currently focuses on:
 
-## Features
+- **AppImage lifecycle**: install, update, list, launch, uninstall
+- **`.deb` lifecycle**: install, list installed packages, uninstall
+- **Desktop UX**: launcher integration and persistent logs
 
-### Installation Management
-- **Easy AppImage Selection**: Browse and select AppImage files with a clean file picker
-- **Easy .deb Package Selection**: Browse and select .deb package files with a clean file picker
-- **Automatic AppImage Installation**: Extracts and installs AppImages to `~/Applications/`
-- **Automatic .deb Installation**: Installs .deb packages using dpkg/apt with dependency resolution
-- **Desktop Integration**: Creates `.desktop` files for AppImage launcher integration
-- **Progress Tracking**: Real-time status updates and progress indication for both package types
-- **Version Management**: Handles app updates while preserving user configurations
-- **Dependency Resolution**: Automatically installs .deb package dependencies
+It does **not** currently manage Flatpak, Snap, RPM, or repository browsing.
 
-### Installed Items Management
-- **Unified Applications List**: View all installed AppImages and .deb packages in one place
-- **Launch Applications**: Launch installed AppImages directly from SquashMate
-- **Uninstall Applications/Packages**: Remove apps/packages with confirmation dialogs
-- **Type Identification**: Clear visual indicators distinguish AppImages from .deb packages
-- **Refresh Functionality**: Update the installed items list on demand
-- **Configuration Preservation**: User settings are kept during AppImage uninstallation
+---
 
-### Logging & Debugging
-- **Background Logging (no in-app viewer)**: Operations and launches are logged under `~/.local/share/squashmate/`
-- **Application Launch Logs**: Individual logs per AppImage (helpful if a launch fails)
-- **Package Installation Logs**: Detailed logs for .deb package installations and uninstallations
-- **Desktop Launch Logging**: Launches from the applications menu are also logged via a wrapper
-- **Launch Wrapper**: `~/.local/bin/squashmate_launcher.py` captures errors when apps start from desktop entries
-- **Error Debugging**: Failed launches and installations capture stderr output for troubleshooting
+## Tech Stack
 
+- Python 3
+- PyQt5
+- Linux desktop tooling (`dpkg`, `apt-get`, `pkexec`, `update-desktop-database`)
 
-### User Interface
-- **Tabbed Interface**: Separate tabs for AppImage installation, .deb installation, and unified management
-- **Modern UI**: Clean, minimal interface built with PyQt5
-- **Status Logging**: Real-time status updates and comprehensive logging for all operations
+---
 
 ## Requirements
 
-- Python 3.6+
-- PyQt5
-- Linux (Ubuntu/Debian compatible)
+### Runtime
 
-## Installation
+- Linux (tested on Ubuntu/Debian-style systems)
+- Python 3.8+ recommended
+- `python3-pyqt5`
 
-1. Clone or download this repository
-2. Install PyQt5 dependency:
-   ```bash
-   sudo apt install python3-pyqt5
-   ```
-3. Make scripts executable (already done):
-   ```bash
-   chmod +x squashmate.py launch.sh
-   ```
-4. Run the application:
-   ```bash
-   ./launch.sh
-   # or directly:
-   python3 squashmate.py
-   ```
+### For `.deb` install/uninstall in GUI
 
-### Quick Install & Run
+- `pkexec` (usually provided by `policykit-1`)
+
+Install requirements:
+
+```bash
+sudo apt update
+sudo apt install -y python3-pyqt5 policykit-1
+```
+
+---
+
+## Quick Start
+
 ```bash
 git clone <repository-url>
 cd SquashMate
-./install_squashmate.sh
-```
-
-This will:
-- Install PyQt5 dependency
-- Add SquashMate to your applications menu
-- Create a desktop entry with icon
-- Make SquashMate accessible via "Show Apps"
-
-### Manual Installation
-If you prefer to run without installing to the system:
-```bash
-sudo apt install python3-pyqt5
+chmod +x launch.sh squashmate.py
 ./launch.sh
 ```
 
-## Usage
+---
 
-### Accessing SquashMate
-- **From Applications Menu**: Search for "SquashMate" in Ubuntu's "Show Apps"
-- **From Terminal**: Run `./launch.sh` in the SquashMate directory
-- **Categories**: Found under System > Utilities in the applications menu
+## Optional System Integration
 
-### Installing AppImages
-1. Go to the **"Install AppImage"** tab
-2. Click "Select AppImage" to choose an AppImage file
-3. Click "Install/Update Application" to begin installation
-4. Monitor progress in the status log
-5. The installed application will be available in your system's application launcher
+Install a desktop launcher entry and wrapper:
 
-### Installing .deb Packages
-1. Go to the **"Install .deb"** tab
-2. Click "Select .deb Package" to choose a .deb package file
-3. Click "Install .deb Package" to begin installation
-4. Monitor progress in the status log (includes dependency installation)
-5. The installed package will be available system-wide
-
-### Managing Installed Applications and Packages
-1. Go to the **"Manage Installed"** tab
-2. View all installed AppImages (📦) and .deb packages (📋) in a unified list
-3. Select an item to:
-   - **Launch**: Run AppImages directly (not available for .deb packages)
-   - **Uninstall**: Remove the application/package (with confirmation)
-4. Use **Refresh** to update the list after manual changes
-
-Tip: Uninstall requires a second, stricter confirmation where you type the item name to avoid accidental removal.
-
-
-### Log Locations (view with any text editor)
-- **Main Log**: `~/.local/share/squashmate/squashmate.log`
-- **App Logs**: `~/.local/share/squashmate/apps/<AppName>.log`
-- **Package Logs**: `~/.local/share/squashmate/deb_packages.log`
-- **Launch Wrapper**: `~/.local/bin/squashmate_launcher.py`
-
-### Troubleshooting Desktop Launches
-If apps installed with SquashMate don't launch from Ubuntu's dashboard:
-1. Check the log files directly at `~/.local/share/squashmate/apps/<AppName>.log`
-2. Desktop launches are marked as "Desktop Launch" in logs
-3. Common issues include missing dependencies or permission problems
-
-### Uninstalling SquashMate
-Run the uninstall script:
 ```bash
+chmod +x install_squashmate.sh
+./install_squashmate.sh
+```
+
+This script:
+
+- Ensures `python3-pyqt5` is present
+- Creates `~/.local/share/applications/SquashMate.desktop`
+- Installs `~/.local/bin/squashmate_launcher.py`
+- Updates desktop database (if available)
+
+Uninstall integration:
+
+```bash
+chmod +x uninstall_squashmate.sh
 ./uninstall_squashmate.sh
 ```
 
-## How It Works
+---
 
-### AppImage Installation:
-1. **Extraction**: Uses the AppImage's built-in `--appimage-extract` command
-2. **Installation**: Moves extracted files to `~/Applications/<AppName>/`
-3. **Desktop Entry**: Creates a `.desktop` file with launcher wrapper for error logging
-4. **Launch Wrapper**: Installs `~/.local/bin/squashmate_launcher.py` for desktop launches
-5. **Permissions**: Sets proper executable permissions for all components
-6. **Logging**: All launches (from SquashMate and desktop) are logged with errors
+## Usage
 
-### .deb Package Installation:
-1. **Validation**: Verifies the .deb file format and integrity
-2. **Package Info**: Extracts package metadata (name, version, dependencies)
-3. **Dependency Check**: Identifies and installs required dependencies using apt
-4. **Installation**: Uses `dpkg -i` to install the package, with fallback dependency resolution
-5. **Verification**: Confirms successful installation using `dpkg -l`
-6. **Logging**: Records installation attempts, successes, and failures
+### 1) Install AppImage
 
-Note on .desktop files: Use `install_squashmate.sh` to create a correct desktop entry for your machine. The repository version uses relative paths for safety.
+1. Open the **Install AppImage** tab
+2. Select an `.AppImage` file
+3. Click **Install/Update Application**
 
-## Future Enhancements
+What SquashMate does:
 
-The codebase is designed to be modular, making it easy to add support for:
-- Other package formats (Flatpak, Snap, etc.)
-- Custom installation directories
-- Advanced configuration options
-- Batch installations
-- Package search and download from repositories
+- Extracts using `--appimage-extract`
+- Installs to `~/Applications/<AppName>/`
+- Creates desktop entry in `~/.local/share/applications/`
+- Sets execute permissions
+- Installs/updates launcher wrapper in `~/.local/bin/`
+
+### 2) Install `.deb`
+
+1. Open the **Install .deb** tab
+2. Select a `.deb` file
+3. Click **Install .deb Package**
+4. Approve authentication prompt when requested
+
+Install flow:
+
+- Validates package with `dpkg --info`
+- Installs via `dpkg -i`
+- Runs `apt-get install -f -y` for dependency resolution
+- Verifies installed state via `dpkg -l`
+
+### 3) Manage Installed Items
+
+In **Manage Installed**:
+
+- `📦` items are AppImages (launch + uninstall supported)
+- `📋` items are installed `.deb` packages (uninstall supported)
+- Uninstall requires a second typed confirmation to reduce accidental removals
+
+---
+
+## Logging & Diagnostics
+
+SquashMate keeps logs under:
+
+- Main log: `~/.local/share/squashmate/squashmate.log`
+- App launch logs: `~/.local/share/squashmate/apps/<AppName>.log`
+- `.deb` install/uninstall log: `~/.local/share/squashmate/deb_packages.log`
+- Desktop wrapper: `~/.local/bin/squashmate_launcher.py`
+
+Desktop launches are marked as **Desktop Launch** in per-app logs.
+
+---
+
+## Known Limitations
+
+- `.deb` listing shows installed packages from the system package database, which can be large on some systems.
+- `.deb` operations rely on host tools (`dpkg`, `apt-get`, `pkexec`) and desktop authentication configuration.
+- Fallback terminal-based `.deb` install path assumes a GNOME terminal environment.
+
+---
+
+## Project Structure
+
+- `squashmate.py` - main GUI and install/uninstall logic
+- `squashmate_launcher.py` - AppImage launch wrapper used by desktop entries
+- `install_squashmate.sh` - desktop integration installer
+- `uninstall_squashmate.sh` - desktop integration remover
+- `launch.sh` - convenience runner
+- `test_launcher.py` - launcher wrapper smoke test
+- `VERSION` - single source of truth for the app version
+
+---
+
+## Releasing a New Version
+
+The app version lives in a single file: `VERSION` at the project root. To ship a new release:
+
+1. Edit `VERSION` (e.g. `1.0.0` → `1.1.0`).
+2. Commit and tag the release.
+
+That value is automatically picked up by:
+
+- The window header version pill (`v1.0.0`).
+- `QApplication.setApplicationVersion(...)` (used by Qt for `--version` and dialogs).
+- `install_squashmate.sh`, which prints the version during install.
+
+No code edits are required to bump versions.
+
+---
+
+## Improvements Applied (Latest Update)
+
+- Fixed `.deb` install success detection so both installation steps must succeed before reporting success.
+- Improved AppImage extraction reliability by always restoring original working directory and cleaning temporary extraction data on failure.
+- Hardened manual command examples for paths containing spaces by shell-quoting `.deb` paths.
+- Refreshed this README for website/use-case clarity and accurate current behavior.
+
+---
+
+## Website Readiness Notes
+
+If you are building a project website, this README now supports:
+
+- Clear product value proposition
+- Accurate feature and scope breakdown
+- Operational flow suitable for docs pages
+- Explicit limitations and environment assumptions
+
+You can reuse sections directly for:
+
+- Landing page (`Highlights`, `Current Scope`)
+- Docs (`Quick Start`, `Usage`, `Logging`, `Known Limitations`)
+- Changelog (`Improvements Applied`)
+
+---
+
+## Roadmap Ideas
+
+- Filter/search in installed `.deb` package list
+- Track only SquashMate-managed `.deb` installs as an optional mode
+- Add exportable diagnostic bundle for support issues
+- Add optional dark theme and accessibility tuning
+- Add release packaging (`.deb`/AppImage) for SquashMate itself
+
+---
 
 ## License
 
-This project is open source and available under the MIT License.
+MIT (recommended). Add a `LICENSE` file if not already included.

@@ -18,6 +18,15 @@ echo "=================================="
 SQUASHMATE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo -e "${BLUE}SquashMate directory: ${SQUASHMATE_DIR}${NC}"
 
+# Read centralized app version (from VERSION file)
+if [ -f "$SQUASHMATE_DIR/VERSION" ]; then
+    SQUASHMATE_VERSION="$(tr -d '[:space:]' < "$SQUASHMATE_DIR/VERSION")"
+    echo -e "${BLUE}SquashMate version: v${SQUASHMATE_VERSION}${NC}"
+else
+    SQUASHMATE_VERSION="unknown"
+    echo -e "${YELLOW}VERSION file not found, continuing without version info${NC}"
+fi
+
 # Check if PyQt5 is installed
 echo -e "\n${YELLOW}Checking dependencies...${NC}"
 if ! python3 -c "import PyQt5" 2>/dev/null; then
@@ -37,16 +46,19 @@ mkdir -p "$APPLICATIONS_DIR"
 echo -e "\n${YELLOW}Creating desktop entry...${NC}"
 cat > "$APPLICATIONS_DIR/SquashMate.desktop" << EOF
 [Desktop Entry]
+Version=1.0
 Name=SquashMate
-Comment=AppImage & Deb Package Manager
+GenericName=AppImage & .deb Manager
+Comment=Install, manage, and launch AppImages and .deb packages
 Exec=$SQUASHMATE_DIR/launch.sh
-Icon=$SQUASHMATE_DIR/squashmate_icon.svg
+Icon=$SQUASHMATE_DIR/squashmate_icon.png
 Type=Application
 Categories=System;PackageManager;Utility;
 Terminal=false
 StartupNotify=true
-Keywords=AppImage;Install;Package;Manager;
-MimeType=application/x-appimage;
+StartupWMClass=SquashMate
+Keywords=AppImage;Install;Package;Manager;Deb;
+MimeType=application/x-appimage;application/vnd.debian.binary-package;
 EOF
 
 # Make the desktop file executable
@@ -70,6 +82,13 @@ if command -v update-desktop-database >/dev/null 2>&1; then
     echo -e "\n${YELLOW}Updating desktop database...${NC}"
     update-desktop-database "$APPLICATIONS_DIR"
     echo -e "${GREEN}✅ Desktop database updated${NC}"
+fi
+
+# Refresh icon cache so the dock picks up the new icon immediately
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    echo -e "\n${YELLOW}Refreshing icon cache...${NC}"
+    gtk-update-icon-cache -t -f "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+    echo -e "${GREEN}✅ Icon cache refreshed${NC}"
 fi
 
 # Success message

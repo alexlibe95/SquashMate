@@ -1,11 +1,14 @@
 [Desktop Entry]
+Version=1.0
 Name=SquashMate
-Comment=AppImage Installation Manager
+GenericName=AppImage & .deb Manager
+Comment=Install, manage, and launch AppImages and .deb packages
 Exec=./launch.sh
-Icon=./squashmate_icon.svg
+Icon=./squashmate_icon.png
 Type=Application
 Categories=System;PackageManager;Utility;
 Terminal=false
 StartupNotify=true
-Keywords=AppImage;Install;Package;Manager;
-MimeType=application/x-appimage;
+StartupWMClass=SquashMate
+Keywords=AppImage;Install;Package;Manager;Deb;
+MimeType=application/x-appimage;application/vnd.debian.binary-package;
